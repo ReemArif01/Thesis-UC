@@ -231,10 +231,8 @@ head(df_terror)
 
 ```{r}
 
+install.packages(c("usethis", "gitcreds", "gh"))
 
-
-
-##hi hello this is reem confused
 ```
 
 
