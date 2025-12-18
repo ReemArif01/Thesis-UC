@@ -1,0 +1,24 @@
+---
+title: "test"
+output: html_document
+---
+
+```{r}
+install.packages("tidyverse")
+install.packages("dplyr")
+library(readr)
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(rvest)
+library(tibble)
+library(stringr)
+```
+
+```{r}
+
+
+```
+
