@@ -225,17 +225,15 @@ nrow(df_terror)
 head(df_terror)
 
 ```
-```{r}
-
-```
 
 ```{r}
 
-install.packages(c("usethis", "gitcreds", "gh"))
+file.info("Gathering Data.Rmd")$size 
+
 
 ```
 
-reeem
+
 
 
 
