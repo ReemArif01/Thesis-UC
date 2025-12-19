@@ -32,8 +32,6 @@ library(readr)
 
 ```{r}
 
-install.packages(c("jsonlite"))
-library(jsonlite)
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
@@ -41,88 +39,67 @@ folder <- "/Users/reemarif/Desktop/1st Quarter/MA Sources/Thesis-UC"
 path <- file.path(folder, "entities.ftm (1).json")
 
 con <- file(path, open = "r")
+on.exit(close(con), add = TRUE)
 
 rows <- list()
-i <- 0
 k <- 0
+i <- 0
 
 while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   i <- i + 1
   x <- fromJSON(line, simplifyVector = FALSE)
 
-  # keep only EU FSF organizations
-  if (identical(x$schema, "Organization") && ("eu_fsf" %in% (x$properties$datasets %||% character()))) {
-    k <- k + 1
-    rows[[k]] <- tibble(
-      id = x$id %||% NA_character_,
-      name = x$caption %||% NA_character_,
-      first_seen = x$properties$first_seen %||% NA_character_,
-      last_seen  = x$properties$last_seen  %||% NA_character_
-    )
+  if (!identical(x$schema, "Organization")) next
+
+  sanc <- x$properties$sanctions
+  if (is.null(sanc)) next
+
+  for (s in sanc) {
+    authority <- tolower(paste(unlist(s$authority %||% character(), use.names = FALSE), collapse = " "))
+    program   <- tolower(paste(unlist(s$program   %||% character(), use.names = FALSE), collapse = " "))
+
+    is_eu_authority <- str_detect(authority, "financial stability|capital markets union|directorate|european union")
+    is_terror_program <- str_detect(program, "terror|2580|931|specific measures to combat terrorism")
+
+    if (is_eu_authority && is_terror_program) {
+      start <- unlist(s$startDate %||% character(), use.names = FALSE)[1] %||% NA_character_
+      end   <- unlist(s$endDate   %||% character(), use.names = FALSE)[1] %||% NA_character_
+
+      k <- k + 1
+      rows[[k]] <- tibble(
+        id = x$id %||% NA_character_,
+        name = x$caption %||% NA_character_,
+        eu_start_date = start,
+        eu_end_date = end,
+        eu_program = paste(unlist(s$program %||% character(), use.names = FALSE), collapse = " · ")
+      )
+    }
   }
 
-  if (i %% 5000 == 0) message("Read ", i, " lines; kept ", k, " EU FSF orgs")
+  if (i %% 50000 == 0) message("Read ", i, " entities; kept ", k, " EU-terror rows")
 }
 
-close(con)
+df_raw <- bind_rows(rows)
 
-df <- bind_rows(rows)
-write.csv(df, file.path(folder, "eu_fsf_organizations.csv"), row.names = FALSE)
+# One row per organization: earliest EU start date
+df_small <- df_raw |>
+  mutate(eu_start_date = na_if(eu_start_date, "")) |>
+  group_by(id, name) |>
+  summarise(
+    eu_designation_date = suppressWarnings(min(eu_start_date, na.rm = TRUE)),
+    eu_end_date = suppressWarnings(min(na_if(eu_end_date, ""), na.rm = TRUE)),
+    eu_program = paste(unique(eu_program), collapse = " | "),
+    .groups = "drop"
+  ) |>
+  mutate(
+    eu_designation_date = ifelse(is.infinite(eu_designation_date), NA, eu_designation_date),
+    eu_end_date = ifelse(is.infinite(eu_end_date), NA, eu_end_date)
+  )
 
-test_orgs <- keep(entities, ~ .x$schema == "Organization")
-length(test_orgs)
-unique(unlist(map(test_orgs[1:100], ~ .x$datasets %||% character())))
-```
-```{r}
-ath <- "/Users/reemarif/Desktop/1st Quarter/MA Sources/Thesis-UC/entities.ftm (1).json"
-con <- file(path, open = "r")
+write.csv(df_small,
+          file.path(folder, "eu_terrorism_designation_dates_small.csv"),
+          row.names = FALSE)
 
-n <- 0
-n_org <- 0
-
-while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0 && n < 20000) {
-  n <- n + 1
-  x <- fromJSON(line, simplifyVector = FALSE)
-  if (identical(x$schema, "Organization")) n_org <- n_org + 1
-}
-
-close(con)
-c(total_checked = n, organizations = n_org)
-```
-```{r}
-
-`%||%` <- function(x, y) if (is.null(x)) y else x
-
-path <- "/Users/reemarif/Desktop/1st Quarter/MA Sources/Thesis-UC/entities.ftm (1).json"
-con <- file(path, open = "r")
-
-vals <- character()
-n <- 0
-
-while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0 && n < 30000) {
-  n <- n + 1
-  x <- fromJSON(line, simplifyVector = FALSE)
-
-  if (identical(x$schema, "Organization")) {
-    ds <- (x$datasets %||% x$properties$datasets %||% character())
-
-    # force to a plain character vector
-    ds <- unlist(ds, use.names = FALSE)
-
-    if (length(ds) > 0) vals <- c(vals, ds)
-  }
-}
-
-close(con)
-
-vals <- unlist(vals, use.names = FALSE)
-
-# Now these will work
-head(sort(unique(vals)), 50)
-"eu_fsf" %in% vals
-
-# Top 30 most common dataset tags
-sort(table(vals), decreasing = TRUE)[1:30]
 
 
 ```
